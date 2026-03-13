@@ -6,9 +6,7 @@
 #
 #   test_tradingview_signal.ps1
 #          ↓
-#   tv-webhook.staybusyent.workers.dev
-#          ↓
-#   Cloudflare Worker
+#   Cloudflare Worker  (URL from pipeline_config.json)
 #          ↓
 #   api.dopedreamspnl.com/webhooks/tradingview/batch
 #          ↓
@@ -18,8 +16,15 @@
 #
 # Usage (from project root):
 #   .\test_tradingview_signal.ps1
+#
+# Worker secret is read from $env:TV_WEBHOOK_SECRET.
 
-$WORKER_URL = "https://tv-webhook.staybusyent.workers.dev/?secret=btc_signal_secret_7421"
+$ErrorActionPreference = "Stop"
+
+$_scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $_scriptRoot "tools\pipeline_common.ps1")
+
+$workerUrl = Get-PipelineWorkerUrl
 
 $body = @{
     source             = "tradingview"
@@ -33,12 +38,12 @@ $body = @{
 } | ConvertTo-Json -Depth 3
 
 Write-Host "Sending TradingView signal to Worker..."
-Write-Host "URL: $WORKER_URL"
+Write-Host "URL: $workerUrl"
 Write-Host ""
 
 try {
     $response = Invoke-RestMethod `
-        -Uri $WORKER_URL `
+        -Uri $workerUrl `
         -Method Post `
         -ContentType "application/json" `
         -Body $body

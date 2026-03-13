@@ -19,10 +19,13 @@ if ($HealthIntervalSeconds -lt 5) {
 }
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$desktopRoot = Split-Path -Parent $scriptRoot
+
+# Load shared helpers and canonical config.
+. (Join-Path $scriptRoot "tools\pipeline_common.ps1")
+$_cfg = Get-PipelineConfig
 
 if ([string]::IsNullOrWhiteSpace($WorkerProjectPath)) {
-    $WorkerProjectPath = Join-Path $desktopRoot "tv-webhook-worker"
+    $WorkerProjectPath = Join-Path (Split-Path -Parent $scriptRoot) "tv-webhook-worker"
 }
 
 if ([string]::IsNullOrWhiteSpace($ReceiptLogPath)) {
@@ -110,13 +113,13 @@ while ($true) {
     $public = "DOWN"
 
     try {
-        $localResp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 5
+        $localResp = Invoke-WebRequest -Uri $_cfg.local_health -TimeoutSec 5
         $local = "HTTP $($localResp.StatusCode)"
     } catch {
     }
 
     try {
-        $publicResp = Invoke-WebRequest -Uri "https://api.dopedreamspnl.com/health" -TimeoutSec 8
+        $publicResp = Invoke-WebRequest -Uri $_cfg.backend_health -TimeoutSec 8
         $public = "HTTP $($publicResp.StatusCode)"
     } catch {
     }

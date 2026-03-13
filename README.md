@@ -16,7 +16,7 @@ TradingView Pine Script  (tradingview/bridge_signal_sender.pine)
   ↓  alert fires on bar close
 Cloudflare Worker  (https://tv-webhook.staybusyent.workers.dev/?secret=<TV_WEBHOOK_SECRET>)
   ↓  forwards JSON batch
-POST /webhooks/tradingview/batch  (FastAPI backend, port 8010)
+POST /webhooks/tradingview/batch  (FastAPI backend, port 8000)
   ↓  accepts + queues batch file
 Ingest Cycle Scheduler  (runs every 60 s inside the API process)
   ↓  normalizes events, writes signal journal, evaluates outcomes, updates market bias
@@ -219,7 +219,7 @@ The batch ingest path uses `TRADINGVIEW_INGEST_SIGNAL_KEY` (set in the Cloudflar
 | `POST` | `/trade_candidates` | Submit trade candidate |
 | `GET` | `/trade_candidates/recent` | Recent trade candidates |
 
-Full interactive API docs: `http://127.0.0.1:8010/docs`
+Full interactive API docs: `http://127.0.0.1:8000/docs`
 
 ---
 
@@ -233,12 +233,12 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### Start the API (port 8010)
+### Start the API (port 8000)
 
 ```powershell
 $env:SIGNAL_WEBHOOK_KEY           = "change-me-now"
 $env:TRADINGVIEW_INGEST_SIGNAL_KEY = "change-me-now"
-python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8010 --reload
+python -m uvicorn backend.api_server:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Or use the launcher scripts:
@@ -254,7 +254,7 @@ Or use the launcher scripts:
 ### Verify it's up
 
 ```powershell
-curl http://127.0.0.1:8010/health
+curl http://127.0.0.1:8000/health
 ```
 
 ### Pipeline status check (one-shot)
@@ -291,6 +291,54 @@ To validate the Pine file and regenerate release notes:
 
 ```powershell
 python tools/build_bridge_pine.py --check-pine --write-release-notes
+```
+
+---
+
+## Canonical pipeline verification
+
+`pipeline_config.json` at the repo root is the single source of truth for all
+local/remote URLs and parameter names.  All `.ps1` pipeline scripts read from
+it via `tools/pipeline_common.ps1` — no hardcoded URLs or port scanning.
+
+```jsonc
+// pipeline_config.json (key fields)
+{
+  "local_api_base":       "http://127.0.0.1:8000",
+  "backend_base":         "https://api.dopedreamspnl.com",
+  "worker_base":          "https://tv-webhook.staybusyent.workers.dev",
+  "batch_path":           "/webhooks/tradingview/batch",
+  "worker_secret_param":  "secret",
+  "signal_key_file":      "data/tv_ingest/signal_key.txt"
+}
+```
+
+### End-to-end verifier (the truth test)
+
+Sends a real batch through the full pipeline and validates each stage:
+
+```powershell
+$env:TV_WEBHOOK_SECRET = "<your-worker-secret>"
+.\verify-pipeline-e2e.ps1
+```
+
+Output shows `PASS` / `FAIL` for each stage:
+
+| Stage | What it proves |
+|---|---|
+| Worker accepted | Worker URL, secret, and config are correct |
+| Backend reachable | Public backend / Cloudflare tunnel is up |
+| Local API reachable | FastAPI running on port 8000 |
+| Batch persisted | Ingest route accepted and wrote `processing_status` JSON |
+| Batch processed | Scheduler advanced the batch to `status=processed` |
+| Journal advanced | Downstream analytics wrote to `signal_journal.jsonl` |
+
+### Periodic watcher
+
+Registers a Windows scheduled task that runs the autoverify script automatically:
+
+```powershell
+.\install-pipeline-autoverify.ps1 -LaunchNow
 ```
 
 ---

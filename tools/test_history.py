@@ -1,6 +1,6 @@
 import urllib.request, json
 
-resp = urllib.request.urlopen("http://127.0.0.1:8010/cohorts/history")
+resp = urllib.request.urlopen("http://127.0.0.1:8000/cohorts/history")
 data = json.loads(resp.read())
 print(f"Count: {data['count']}")
 for r in data["rows"][:10]:
@@ -13,11 +13,11 @@ for r in data["rows"][:10]:
     print(f"  {h:7s} | {ck:40s} | quality={qs:+.4f} | promo={ps:.4f} | decay={ds:.4f} | n={n}")
 
 # Test filter by horizon
-resp2 = urllib.request.urlopen("http://127.0.0.1:8010/cohorts/history?horizon=medium")
+resp2 = urllib.request.urlopen("http://127.0.0.1:8000/cohorts/history?horizon=medium")
 data2 = json.loads(resp2.read())
 print(f"\nFiltered (medium): {data2['count']} rows")
 
-# Test filter by cohort_key 
-resp3 = urllib.request.urlopen("http://127.0.0.1:8010/cohorts/history?limit=2")
+# Test filter by cohort_key
+resp3 = urllib.request.urlopen("http://127.0.0.1:8000/cohorts/history?limit=2")
 data3 = json.loads(resp3.read())
 print(f"Limited to 2: {data3['count']} rows")
