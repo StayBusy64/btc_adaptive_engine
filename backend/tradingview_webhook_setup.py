@@ -4,16 +4,30 @@ import os
 import secrets
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+try:
+    from .path_config import (
+        REPO_ROOT as PROJECT_ROOT,
+        WEBHOOK_BATCH_PATH as ENDPOINT_PATH,
+        ENV_PUBLIC_BASE_URL,
+        ENV_WEBHOOK_HOST,
+        ENV_WEBHOOK_PORT,
+    )
+except ImportError:
+    # Fallback when the module is executed directly as a script.
+    PROJECT_ROOT = Path(__file__).resolve().parents[1]
+    ENDPOINT_PATH = "/webhooks/tradingview/batch"
+    ENV_PUBLIC_BASE_URL = "TRADINGVIEW_PUBLIC_BASE_URL"
+    ENV_WEBHOOK_HOST = "TRADINGVIEW_WEBHOOK_HOST"
+    ENV_WEBHOOK_PORT = "TRADINGVIEW_WEBHOOK_PORT"
+
 INGEST_FOLDER = PROJECT_ROOT / "data" / "tv_ingest"
 LOG_FILE = INGEST_FOLDER / "signals.log"
 SIGNAL_KEY_FILE = INGEST_FOLDER / "signal_key.txt"
 ENV_SCRIPT_FILE = INGEST_FOLDER / "webhook_env.ps1"
 
-HOST = os.getenv("TRADINGVIEW_WEBHOOK_HOST", "127.0.0.1")
-PORT = int(os.getenv("TRADINGVIEW_WEBHOOK_PORT", "8000"))
-ENDPOINT_PATH = "/webhooks/tradingview/batch"
-PUBLIC_BASE_URL = os.getenv("TRADINGVIEW_PUBLIC_BASE_URL", "").strip()
+HOST = os.getenv(ENV_WEBHOOK_HOST, "127.0.0.1")
+PORT = int(os.getenv(ENV_WEBHOOK_PORT, "8000"))
+PUBLIC_BASE_URL = os.getenv(ENV_PUBLIC_BASE_URL, "").strip()
 
 
 def _normalize_base_url(raw: str) -> str:
