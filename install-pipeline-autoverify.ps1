@@ -23,8 +23,11 @@ Write-Host "Interval:       every $IntervalMinutes minutes"
 Write-Host ""
 
 # Build the PowerShell command to run in the task.
-$psExe    = (Get-Command powershell.exe -ErrorAction SilentlyContinue)?.Source
-if ([string]::IsNullOrWhiteSpace($psExe)) { $psExe = "powershell.exe" }
+$psExe = if (Get-Command powershell.exe -ErrorAction SilentlyContinue) {
+    (Get-Command powershell.exe -ErrorAction SilentlyContinue).Source
+} else {
+    "powershell.exe"
+}
 
 $taskArgs = "-NoLogo -NonInteractive -ExecutionPolicy Bypass -File `"$autoverifyScript`""
 

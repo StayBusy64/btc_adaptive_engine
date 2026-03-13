@@ -240,7 +240,8 @@ for ($i = 1; $i -le $PollAttempts; $i++) {
     Write-Host "  poll $i/$PollAttempts — waiting for $statusFile"
 }
 
-Set-Check -Name "Batch persisted" -Value $batchPersisted -Detail ($batchPersisted ? $statusFile : "not found after $($PollAttempts * $PollDelaySeconds)s")
+$persistedDetail = if ($batchPersisted) { $statusFile } else { "not found after $($PollAttempts * $PollDelaySeconds)s" }
+Set-Check -Name "Batch persisted" -Value $batchPersisted -Detail $persistedDetail
 
 # ---------------------------------------------------------------------------
 # Step 5: Poll for batch processed (status == processed + event JSON)
@@ -287,7 +288,8 @@ for ($i = 1; $i -le $PollAttempts; $i++) {
     Write-Host ("  poll {0}/{1} — status_ok={2}  event_file={3}" -f $i, $PollAttempts, $statusOk, $eventOk)
 }
 
-Set-Check -Name "Batch processed" -Value $batchProcessed -Detail ($batchProcessed ? "status=processed + event found" : "not processed after $($PollAttempts * $PollDelaySeconds)s")
+$processedDetail = if ($batchProcessed) { "status=processed + event found" } else { "not processed after $($PollAttempts * $PollDelaySeconds)s" }
+Set-Check -Name "Batch processed" -Value $batchProcessed -Detail $processedDetail
 
 # ---------------------------------------------------------------------------
 # Step 6: Journal advanced (secondary)
@@ -310,7 +312,8 @@ for ($i = 1; $i -le $PollAttempts; $i++) {
     Write-Host "  poll $i/$PollAttempts — journal entry not yet present"
 }
 
-Set-Check -Name "Journal advanced" -Value $journalAdvanced -Detail ($journalAdvanced ? "found in signal_journal.jsonl" : "not in journal after polling (secondary — non-blocking)")
+$journalDetail = if ($journalAdvanced) { "found in signal_journal.jsonl" } else { "not in journal after polling (secondary — non-blocking)" }
+Set-Check -Name "Journal advanced" -Value $journalAdvanced -Detail $journalDetail
 
 # ---------------------------------------------------------------------------
 # Final report
