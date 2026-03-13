@@ -6,10 +6,12 @@ from typing import Any
 from backend.bar_utils import normalize_bar_rows
 from backend.candle_feature_engine import CandleFeatureEngine
 from backend.displacement_engine import DisplacementEngine
+from backend.divergence_engine import DivergenceEngine
 from backend.feature_contract import FeatureContext, FeatureEngine, FeatureMap, FeatureSpec
 from backend.indicators_engine import IndicatorsEngine
 from backend.liquidity_engine import LiquidityEngine
 from backend.model_engine import score_state
+from backend.orderflow_engine import OrderFlowEngine
 from backend.range_expansion_engine import RangeExpansionEngine
 from backend.regime_engine import classify_regime
 from backend.session_context_engine import SessionContextEngine
@@ -97,6 +99,8 @@ _DEFAULT_PIPELINE = FeaturePipeline(
         LiquidityEngine(),
         DisplacementEngine(),
         SessionContextEngine(),
+        OrderFlowEngine(),
+        DivergenceEngine(),
     ]
 )
 
