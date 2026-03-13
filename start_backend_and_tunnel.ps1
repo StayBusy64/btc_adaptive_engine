@@ -126,7 +126,7 @@ $backendProcess = Start-Process -FilePath $pythonExe `
 Write-Host "Backend PID: $($backendProcess.Id)"
 
 # ===== START TUNNEL =====
-$tunnelArgs = "--config `"$TunnelConfig`" tunnel run"
+$tunnelArgs = @("--config", $TunnelConfig, "tunnel", "run")
 
 Write-Host "Starting Cloudflare Tunnel ($TunnelName) ..."
 $tunnelProcess = Start-Process -FilePath $cloudflaredExe `
