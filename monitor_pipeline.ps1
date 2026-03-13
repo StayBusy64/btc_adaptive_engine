@@ -19,18 +19,21 @@ if ($HealthIntervalSeconds -lt 5) {
 }
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$desktopRoot = Split-Path -Parent $scriptRoot
 
 if ([string]::IsNullOrWhiteSpace($WorkerProjectPath)) {
-    $WorkerProjectPath = Join-Path $desktopRoot "tv-webhook-worker"
+    # Try sibling directory tv-webhook-worker next to the repo root.
+    $siblingWorkerPath = Join-Path (Split-Path -Parent $scriptRoot) "tv-webhook-worker"
+    if (Test-Path $siblingWorkerPath) {
+        $WorkerProjectPath = $siblingWorkerPath
+    }
 }
 
 if ([string]::IsNullOrWhiteSpace($ReceiptLogPath)) {
     $ReceiptLogPath = Join-Path $scriptRoot "data\logs\tv_ingest_receipts.jsonl"
 }
 
-if (-not (Test-Path $WorkerProjectPath)) {
-    throw "Worker project path not found: $WorkerProjectPath"
+if ([string]::IsNullOrWhiteSpace($WorkerProjectPath) -or -not (Test-Path $WorkerProjectPath)) {
+    throw "Worker project path not found: '$WorkerProjectPath'. Pass -WorkerProjectPath with the full path to your tv-webhook-worker directory."
 }
 
 $receiptDir = Split-Path -Parent $ReceiptLogPath

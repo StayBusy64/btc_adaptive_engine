@@ -1,9 +1,13 @@
 param(
     [string]$TaskName = "BTC Adaptive Engine API Watchdog",
-    [string]$RepoRoot = "C:\Users\Stayb\OneDrive\Desktop\btc_adaptive_engine"
+    [string]$RepoRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+}
 
 $scriptPath = Join-Path $RepoRoot "start_api_watchdog.ps1"
 if (-not (Test-Path $scriptPath)) {

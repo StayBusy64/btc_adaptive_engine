@@ -1,10 +1,14 @@
 param(
     [string]$TaskName = "BTC Cloudflared Tunnel",
     [string]$TunnelName = "btc-adaptive-engine",
-    [string]$ConfigPath = "C:\Users\Stayb\.cloudflared\config.yml"
+    [string]$ConfigPath = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+    $ConfigPath = Join-Path $env:USERPROFILE ".cloudflared\config.yml"
+}
 
 $cloudflaredCmd = Get-Command cloudflared -ErrorAction SilentlyContinue
 if (-not $cloudflaredCmd) {

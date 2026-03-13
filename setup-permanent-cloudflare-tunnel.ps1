@@ -9,9 +9,10 @@ $Domain       = "dopedreamspnl.com"
 $Hostname     = "api.$Domain"
 $LocalService = "http://localhost:8000"
 
-# Optional local files to patch after tunnel creation
-$WorkerConfigPath = "C:\Users\Stayb\OneDrive\Desktop\tv-webhook-worker\wrangler.jsonc"
-$PipelineTestPath = "C:\Users\Stayb\OneDrive\Desktop\btc_adaptive_engine\test-webhook-pipeline.ps1"
+# Optional local files to patch after tunnel creation.
+# Leave empty to skip patching; supply full absolute paths to enable.
+$WorkerConfigPath = ""
+$PipelineTestPath = ""
 
 # ===== PATHS =====
 $CloudflaredDir = "C:\Cloudflared"

@@ -29,10 +29,23 @@ $logDir = Join-Path $root "data\logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $logPath = Join-Path $logDir "api_watchdog.log"
 
-$venvPython = "C:\Users\Stayb\OneDrive\Desktop\.venv\Scripts\python.exe"
+$venvPython = $null
 $pythonExe = $null
 
-if (Test-Path $venvPython) {
+# 1) Activated virtual environment
+if (-not [string]::IsNullOrWhiteSpace($env:VIRTUAL_ENV)) {
+    $venvPython = Join-Path $env:VIRTUAL_ENV "Scripts\python.exe"
+}
+
+# 2) Repo-local .venv
+if (-not $venvPython -or -not (Test-Path $venvPython)) {
+    $localVenv = Join-Path $root ".venv\Scripts\python.exe"
+    if (Test-Path $localVenv) {
+        $venvPython = $localVenv
+    }
+}
+
+if ($venvPython -and (Test-Path $venvPython)) {
     $pythonExe = $venvPython
 } else {
     $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
