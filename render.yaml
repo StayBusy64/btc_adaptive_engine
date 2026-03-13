@@ -3,11 +3,12 @@ services:
     name: btc-adaptive-engine-bridge
     runtime: python
     plan: free
-    rootDir: OneDrive/Desktop/btc_adaptive_engine
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn backend.tradingview_bridge_standalone:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn backend.api_server:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      - key: TV_SIGNAL_KEY
+      - key: SIGNAL_WEBHOOK_KEY
+        sync: false
+      - key: TRADINGVIEW_INGEST_SIGNAL_KEY
         sync: false
