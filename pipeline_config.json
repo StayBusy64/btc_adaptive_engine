@@ -1,0 +1,11 @@
+{
+  "local_api_base": "http://127.0.0.1:8000",
+  "local_health": "http://127.0.0.1:8000/health",
+  "backend_base": "https://api.dopedreamspnl.com",
+  "backend_health": "https://api.dopedreamspnl.com/health",
+  "batch_path": "/webhooks/tradingview/batch",
+  "worker_base": "https://tv-webhook.staybusyent.workers.dev",
+  "worker_secret_param": "secret",
+  "signal_key_query_param": "signal_key",
+  "signal_key_file": "data/tv_ingest/signal_key.txt"
+}

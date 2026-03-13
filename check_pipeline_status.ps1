@@ -1,12 +1,22 @@
 param(
-    [string]$WorkerBaseUrl = "https://tv-webhook.staybusyent.workers.dev",
-    [string]$PublicApiHealthUrl = "https://api.dopedreamspnl.com/health",
-    [string]$LocalApiHealthUrl = "http://127.0.0.1:8000/health",
+    [string]$WorkerBaseUrl = "",
+    [string]$PublicApiHealthUrl = "",
+    [string]$LocalApiHealthUrl = "",
     [string]$TvWebhookSecret = "",
     [string]$Symbol = "BTCUSDT.P"
 )
 
 $ErrorActionPreference = "Stop"
+
+# Load shared helpers and canonical config.
+$_scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $_scriptRoot "tools\pipeline_common.ps1")
+
+$_cfg = Get-PipelineConfig
+
+if ([string]::IsNullOrWhiteSpace($WorkerBaseUrl))     { $WorkerBaseUrl     = $_cfg.worker_base }
+if ([string]::IsNullOrWhiteSpace($PublicApiHealthUrl)) { $PublicApiHealthUrl = $_cfg.backend_health }
+if ([string]::IsNullOrWhiteSpace($LocalApiHealthUrl))  { $LocalApiHealthUrl  = $_cfg.local_health }
 
 function Write-Check {
     param(
@@ -85,7 +95,8 @@ if ([string]::IsNullOrWhiteSpace($TvWebhookSecret)) {
     Write-Check -Name "Worker probe" -Result "Skipped (set -TvWebhookSecret or TV_WEBHOOK_SECRET)" -Color Yellow
 } else {
     $runId = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-    $workerProbeUrl = "$WorkerBaseUrl/?secret=$TvWebhookSecret"
+    $secretParam = $_cfg.worker_secret_param
+    $workerProbeUrl = "$WorkerBaseUrl/?$secretParam=$TvWebhookSecret"
 
     $payloadObj = @{
         source = "tradingview"

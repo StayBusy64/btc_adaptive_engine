@@ -152,7 +152,7 @@ def test_worker_uses_auth_header_for_api_calls(monkeypatch):
 
     monkeypatch.setattr(execution_worker.urllib.request, "urlopen", fake_urlopen)
 
-    client = ApiClient("http://127.0.0.1:8010", "secret-key", timeout_seconds=9.0)
+    client = ApiClient("http://127.0.0.1:8000", "secret-key", timeout_seconds=9.0)
     response = client.claim_next("worker-auth")
 
     assert response["status"] == "empty"
