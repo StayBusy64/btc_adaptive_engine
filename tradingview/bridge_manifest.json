@@ -1,0 +1,290 @@
+{
+  "current_release": {
+    "release_id": "bridge_signal_sender_v2.1.0",
+    "release_version": "2.1.0",
+    "strategy_id": "bridge_signal_sender_v2",
+    "contract_version": "tv-bridge-batch-v1",
+    "telemetry_schema_version": "tv-telemetry-v1",
+    "release_channel": "production",
+    "pine_script_name": "Bridge Signal Sender",
+    "pine_language_version": "6"
+  },
+  "alert_settings": {
+    "name": "BTCUSDT Bridge Sender v2",
+    "condition": "Bridge Signal Sender -> Any alert() function call",
+    "trigger": "Once Per Bar Close",
+    "message": "bridge",
+    "webhook_url_template": "https://tv-webhook.staybusyent.workers.dev/?secret=<TV_WEBHOOK_SECRET>",
+    "notes": [
+      "Delete and recreate alerts whenever Pine release metadata changes.",
+      "Keep the alert message minimal because the script-generated alert() body carries the contract.",
+      "Use the Worker URL, not the direct backend batch endpoint, for live TradingView alerts."
+    ]
+  },
+  "pine_defaults": {
+    "signal_source": "tradingview",
+    "signal_namespace": "ghostprint",
+    "signal_family": "momentum",
+    "signal_type_long": "continuation",
+    "signal_type_short": "continuation",
+    "fast_len": 9,
+    "slow_len": 21,
+    "trend_len": 50,
+    "rsi_len": 14,
+    "rsi_long_threshold": 52.0,
+    "rsi_short_threshold": 48.0,
+    "atr_len": 14,
+    "volume_sma_len": 20,
+    "slope_lookback": 3,
+    "use_confirmed_bars_only": true,
+    "send_long_alerts": true,
+    "send_short_alerts": true
+  },
+  "telemetry_contract": {
+    "stable_batch_fields": [
+      "source",
+      "namespace",
+      "symbol",
+      "chart_tf",
+      "batch_id",
+      "batch_trigger_side",
+      "batch_size",
+      "batch_close_time",
+      "confirmed",
+      "contract_version",
+      "telemetry_schema_version",
+      "release_id",
+      "release_version",
+      "release_channel",
+      "events"
+    ],
+    "stable_event_fields": [
+      "event_id",
+      "event_time",
+      "side",
+      "signal_type",
+      "signal_family",
+      "signal_name",
+      "strategy_id",
+      "price",
+      "confirmed",
+      "micro",
+      "macro",
+      "research"
+    ],
+    "stable_micro_fields": [
+      "ticker",
+      "tickerid",
+      "exchange",
+      "base_currency",
+      "quote_currency",
+      "timeframe",
+      "strategy_id",
+      "signal_name",
+      "open",
+      "high",
+      "low",
+      "close",
+      "hl2",
+      "hlc3",
+      "ohlc4",
+      "volume",
+      "bar_time",
+      "bar_open_time",
+      "bar_close_time",
+      "bar_index",
+      "fast_ema",
+      "slow_ema",
+      "trend_ema",
+      "rsi",
+      "atr",
+      "atr_pct",
+      "vol_sma",
+      "rel_volume",
+      "ema_spread",
+      "ema_spread_abs",
+      "ema_spread_bps",
+      "fast_slope",
+      "slow_slope",
+      "dist_fast",
+      "dist_slow",
+      "dist_fast_bps",
+      "dist_slow_bps",
+      "candle_range",
+      "candle_body",
+      "upper_wick",
+      "lower_wick",
+      "body_to_range",
+      "upper_wick_to_range",
+      "lower_wick_to_range",
+      "is_bull_body",
+      "is_bear_body",
+      "is_expansion_bar",
+      "is_compression_bar"
+    ],
+    "stable_macro_fields": [
+      "trend_direction",
+      "regime_tag",
+      "price_vs_trend",
+      "momentum_regime",
+      "volume_regime",
+      "candle_bias",
+      "wick_bias",
+      "ema_bull_stack",
+      "ema_bear_stack",
+      "use_rsi_filter",
+      "rsi_long_threshold",
+      "rsi_short_threshold",
+      "fast_len",
+      "slow_len",
+      "trend_len",
+      "rsi_len",
+      "atr_len",
+      "vol_sma_len",
+      "slope_lookback",
+      "confirmed_bars_only"
+    ],
+    "experimental_fields": {
+      "signal_quality_score": {
+        "layer": "research",
+        "status": "candidate",
+        "purpose": "Aggregated quality score used to compare release filtering decisions.",
+        "description": "0-1 score that balances continuation support against contradiction and mean reversion risk."
+      },
+      "trend_slope_score": {
+        "layer": "research",
+        "status": "candidate",
+        "purpose": "Measures whether slope acceleration supports the current signal side."
+      },
+      "continuation_confidence": {
+        "layer": "research",
+        "status": "candidate",
+        "purpose": "Measures how much current trend, slope, volume, and RSI support follow-through."
+      },
+      "mean_reversion_risk": {
+        "layer": "research",
+        "status": "candidate",
+        "purpose": "Flags stretched or rejection-prone entries that may revert instead of continue."
+      },
+      "regime_bias_score": {
+        "layer": "research",
+        "status": "candidate",
+        "purpose": "Measures how favorable the current regime and price-vs-trend structure are for the signal side."
+      },
+      "contradiction_pressure": {
+        "layer": "research",
+        "status": "candidate",
+        "purpose": "Measures how much near-term evidence contradicts the signal side."
+      },
+      "macro_bias_score": {
+        "layer": "research",
+        "status": "research",
+        "purpose": "Reserved for future backend-informed macro bias feedback."
+      },
+      "cohort_alignment_score": {
+        "layer": "research",
+        "status": "research",
+        "purpose": "Reserved for future cohort-conditioned feature promotion and demotion."
+      }
+    }
+  },
+  "decay_framework": {
+    "recent_impulse": {
+      "half_life_bars": 3,
+      "contradiction_multiplier": 2.0,
+      "refresh_signals": [
+        "fresh displacement",
+        "follow-through volume expansion",
+        "confirmed continuation bar"
+      ],
+      "contradiction_signals": [
+        "failed follow-through",
+        "immediate opposite rejection",
+        "below-trend acceptance"
+      ],
+      "floor": 0.0,
+      "ceiling": 1.0
+    },
+    "recent_rejection": {
+      "half_life_bars": 4,
+      "contradiction_multiplier": 1.8,
+      "refresh_signals": [
+        "repeat wick rejection",
+        "acceptance failure",
+        "exhaustion confirmation"
+      ],
+      "contradiction_signals": [
+        "clean trend continuation",
+        "value acceptance in signal direction"
+      ],
+      "floor": 0.0,
+      "ceiling": 1.0
+    },
+    "regime_bias": {
+      "half_life_bars": 24,
+      "contradiction_multiplier": 2.4,
+      "refresh_signals": [
+        "persistent trend stack",
+        "session-level continuation success",
+        "aligned higher-timeframe bias"
+      ],
+      "contradiction_signals": [
+        "opposite rejection cluster",
+        "trend collapse",
+        "chop transition"
+      ],
+      "floor": 0.0,
+      "ceiling": 1.0
+    },
+    "session_bias": {
+      "half_life_bars": 16,
+      "contradiction_multiplier": 2.0,
+      "refresh_signals": [
+        "same-session continuation success",
+        "opening drive confirmation"
+      ],
+      "contradiction_signals": [
+        "session reversal",
+        "opening drive failure"
+      ],
+      "floor": 0.0,
+      "ceiling": 1.0
+    }
+  },
+  "feature_reliability": {
+    "rolling_windows": {
+      "micro_bars": 120,
+      "macro_bars": 720
+    },
+    "condition_keys": [
+      "release_version",
+      "strategy_id",
+      "signal_name",
+      "side",
+      "timeframe",
+      "regime_tag",
+      "trend_direction",
+      "session"
+    ],
+    "side_specific": true,
+    "regime_specific": true,
+    "promotion_min_samples": 40,
+    "demotion_min_samples": 20,
+    "penalty_memory_bars": 60
+  },
+  "baseline_releases": [
+    {
+      "tag": "bridge-v1.0.0-stable",
+      "release_version": "2.1.0",
+      "release_channel": "production",
+      "frozen_at": "2025-01-01T00:00:00Z",
+      "manifest_snapshot": "tradingview/bridge_v1.0.0_stable.json"
+    }
+  ],
+  "roadmap": [
+    "Use research fields to score cohort usefulness by release_version and signal side.",
+    "Add contradiction-driven decay refresh/fade logic to backend weighting services.",
+    "Promote or retire research fields only after cohort-conditioned outcome review.",
+    "Extend Pine with acceptance vs rejection and continuation vs exhaustion refinements once feature usefulness data is stable."
+  ]
+}

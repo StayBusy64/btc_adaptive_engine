@@ -1,0 +1,72 @@
+{
+  "frozen_release": {
+    "tag": "bridge-v1.0.0-stable",
+    "frozen_at": "2025-01-01T00:00:00Z",
+    "purpose": "Stable baseline anchor for A/B cohort comparisons. All future experiments (canary, beta, experimental) are measured against this release.",
+    "source_release_id": "bridge_signal_sender_v2.1.0",
+    "source_release_version": "2.1.0",
+    "source_release_channel": "production",
+    "source_contract_version": "tv-bridge-batch-v1",
+    "source_telemetry_schema_version": "tv-telemetry-v1",
+    "strategy_id": "bridge_signal_sender_v2",
+    "pine_language_version": "6"
+  },
+  "pine_defaults": {
+    "signal_source": "tradingview",
+    "signal_namespace": "ghostprint",
+    "signal_family": "momentum",
+    "signal_type_long": "continuation",
+    "signal_type_short": "continuation",
+    "fast_len": 9,
+    "slow_len": 21,
+    "trend_len": 50,
+    "rsi_len": 14,
+    "rsi_long_threshold": 52.0,
+    "rsi_short_threshold": 48.0,
+    "atr_len": 14,
+    "volume_sma_len": 20,
+    "slope_lookback": 3,
+    "use_confirmed_bars_only": true,
+    "send_long_alerts": true,
+    "send_short_alerts": true
+  },
+  "telemetry_contract_snapshot": {
+    "stable_batch_fields": [
+      "source", "namespace", "symbol", "chart_tf", "batch_id",
+      "batch_trigger_side", "batch_size", "batch_close_time", "confirmed",
+      "contract_version", "telemetry_schema_version",
+      "release_id", "release_version", "release_channel", "events"
+    ],
+    "experimental_fields_at_freeze": [
+      "signal_quality_score",
+      "trend_slope_score",
+      "continuation_confidence",
+      "mean_reversion_risk",
+      "regime_bias_score",
+      "contradiction_pressure",
+      "macro_bias_score",
+      "cohort_alignment_score"
+    ],
+    "all_experimental_status": "candidate",
+    "note": "At baseline freeze, all 8 research fields are in candidate status. The cohort scoring engine will evaluate and transition them via the lifecycle state machine."
+  },
+  "decay_framework_snapshot": {
+    "states": ["recent_impulse", "recent_rejection", "regime_bias", "session_bias"],
+    "half_life_bars": {"recent_impulse": 3, "recent_rejection": 4, "regime_bias": 24, "session_bias": 16},
+    "contradiction_multipliers": {"recent_impulse": 2.0, "recent_rejection": 1.8, "regime_bias": 2.4, "session_bias": 2.0}
+  },
+  "feature_reliability_snapshot": {
+    "promotion_min_samples": 40,
+    "demotion_min_samples": 20,
+    "penalty_memory_bars": 60,
+    "rolling_windows": {"micro_bars": 120, "macro_bars": 720}
+  },
+  "comparison_instructions": {
+    "how_to_compare": "Use GET /cohorts/compare?left_version=2.1.0&right_version=<new_version>&horizon=medium to compare any future release against this baseline.",
+    "versioning_contract": [
+      "Patch (2.1.x): Pine parameter tweaks, no field changes",
+      "Minor (2.x.0): New research fields or decay state additions",
+      "Major (x.0.0): Breaking contract/schema changes"
+    ]
+  }
+}

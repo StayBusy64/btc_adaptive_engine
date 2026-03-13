@@ -1,0 +1,27 @@
+//@version=6
+indicator("BTC 1M Adaptive Orderflow Scaffold", overlay=false)
+
+// --------------------------------------------------
+// Placeholder inputs
+// --------------------------------------------------
+lookback = input.int(20, "Lookback")
+volLen   = input.int(20, "Volume Length")
+
+// --------------------------------------------------
+// Placeholder feature logic
+// --------------------------------------------------
+bodySize     = math.abs(close - open)
+rangeSize    = high - low
+upperWick    = high - math.max(open, close)
+lowerWick    = math.min(open, close) - low
+avgVolume    = ta.sma(volume, volLen)
+relVolume    = avgVolume != 0 ? volume / avgVolume : 0.0
+bodyEff      = rangeSize != 0 ? bodySize / rangeSize : 0.0
+
+longScore    = bodyEff > 0.5 and close > open ? 0.6 : 0.2
+shortScore   = bodyEff > 0.5 and close < open ? 0.6 : 0.2
+noTradeScore = 1.0 - math.max(longScore, shortScore)
+
+plot(longScore, "Long Score")
+plot(shortScore, "Short Score")
+plot(noTradeScore, "No Trade Score")

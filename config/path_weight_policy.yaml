@@ -1,0 +1,176 @@
+# ---------------------------------------------------------------------------
+# Path Weight Policy — storage lifecycle configuration
+# ---------------------------------------------------------------------------
+# Governs hot/warm/cold/dead file transitions and folder priorities.
+#
+# File decay formula:
+#   file_value = 0.35*recency_score
+#              + 0.25*retrieval_frequency
+#              + 0.20*contained_high_quality_events
+#              + 0.10*schema_relevance
+#              - 0.10*size_penalty
+#
+# File lifecycle thresholds:
+#   >= 0.75  hot   (fast-access, no compression)
+#   0.50–0.74  warm  (retained, may compress)
+#   0.25–0.49  cold  (compressed, infrequent access)
+#   <  0.25  dead  (summarise → delete)
+#
+# Path score formula:
+#   path_score = 0.30*operational_priority
+#              + 0.25*training_priority
+#              + 0.20*content_value
+#              + 0.15*access_frequency
+#              - 0.05*io_cost
+#              - 0.05*fragmentation_penalty
+# ---------------------------------------------------------------------------
+
+file_lifecycle:
+  thresholds:
+    hot: 0.75
+    warm: 0.50
+    cold: 0.25
+    # below cold → dead (summarise + delete)
+
+  scoring_weights:
+    recency_score: 0.35
+    retrieval_frequency: 0.25
+    contained_high_quality_events: 0.20
+    schema_relevance: 0.10
+    size_penalty: -0.10
+
+  # How quickly recency decays (hours)
+  recency_half_life_hours: 48
+  # Max file size (MB) before size_penalty kicks in
+  size_penalty_threshold_mb: 10.0
+
+path_score:
+  weights:
+    operational_priority: 0.30
+    training_priority: 0.25
+    content_value: 0.20
+    access_frequency: 0.15
+    io_cost: -0.05
+    fragmentation_penalty: -0.05
+
+# ---------------------------------------------------------------------------
+# Folder policies — per-directory rules
+# ---------------------------------------------------------------------------
+folders:
+  # --- Hot tier: operational data, fast access ---
+  "data/state/outcomes":
+    tier: hot
+    operational_priority: 1.0
+    training_priority: 0.8
+    content_value: 0.9
+    retention_days: -1          # never auto-delete
+    compression: none
+    description: "Signal journal + outcome JSONL — primary truth source"
+
+  "data/tv_ingest/incoming":
+    tier: hot
+    operational_priority: 1.0
+    training_priority: 0.3
+    content_value: 0.5
+    retention_days: 7
+    compression: none
+    description: "Raw webhook payloads awaiting processing"
+
+  "data/tv_ingest/normalized":
+    tier: hot
+    operational_priority: 0.9
+    training_priority: 0.7
+    content_value: 0.8
+    retention_days: 30
+    compression: none
+    description: "Normalised events with full micro/macro context"
+
+  # --- Warm tier: processed data, may compress ---
+  "data/processed":
+    tier: warm
+    operational_priority: 0.4
+    training_priority: 0.9
+    content_value: 0.8
+    retention_days: 90
+    compression: gzip
+    description: "Feature-enriched snapshots for model training"
+
+  "data/tv_ingest/acknowledged":
+    tier: warm
+    operational_priority: 0.2
+    training_priority: 0.5
+    content_value: 0.4
+    retention_days: 30
+    compression: gzip
+    description: "Acknowledged ingest events (audit trail)"
+
+  "data/raw":
+    tier: warm
+    operational_priority: 0.3
+    training_priority: 0.6
+    content_value: 0.5
+    retention_days: 60
+    compression: gzip
+    description: "Raw bar data from external sources"
+
+  # --- Cold tier: archive, compressed, infrequent access ---
+  "data/logs":
+    tier: cold
+    operational_priority: 0.1
+    training_priority: 0.1
+    content_value: 0.2
+    retention_days: 30
+    compression: gzip
+    description: "Application logs"
+
+  "data/cache":
+    tier: cold
+    operational_priority: 0.2
+    training_priority: 0.0
+    content_value: 0.1
+    retention_days: 7
+    compression: none
+    description: "Ephemeral cache — safe to purge"
+
+  "data/intake":
+    tier: cold
+    operational_priority: 0.1
+    training_priority: 0.2
+    content_value: 0.2
+    retention_days: 14
+    compression: gzip
+    description: "Legacy intake files"
+
+  # --- Model / summary folders ---
+  "data/models":
+    tier: warm
+    operational_priority: 0.7
+    training_priority: 1.0
+    content_value: 0.9
+    retention_days: -1
+    compression: none
+    description: "Trained model artifacts"
+
+  "data/summaries":
+    tier: warm
+    operational_priority: 0.3
+    training_priority: 0.5
+    content_value: 0.6
+    retention_days: -1
+    compression: gzip
+    description: "Aggregated summaries from cold/dead file compaction"
+
+# ---------------------------------------------------------------------------
+# Feature survival thresholds (mirrors feature_registry.py constants)
+# ---------------------------------------------------------------------------
+feature_survival:
+  hot_threshold: 0.70
+  warm_threshold: 0.50
+  experimental_threshold: 0.30
+  # below experimental → archive/drop
+
+  # Evaluation cadence
+  evaluation_interval_minutes: 60
+  min_samples_for_scoring: 50
+  # Grace period before a new feature can be demoted
+  grace_period_hours: 72

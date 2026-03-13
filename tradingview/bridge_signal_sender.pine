@@ -1,0 +1,342 @@
+//@version=6
+indicator("Bridge Signal Sender", overlay=true, max_labels_count=500)
+
+//====================================================
+// INPUTS
+//====================================================
+groupSignal = "Signal Logic"
+groupContext = "Context"
+groupPayload = "Payload"
+groupDisplay = "Display"
+
+fastLen = input.int(9, "Fast EMA Length", minval=1, group=groupContext)
+slowLen = input.int(21, "Slow EMA Length", minval=1, group=groupContext)
+trendLen = input.int(50, "Trend EMA Length", minval=1, group=groupContext)
+
+useRsiFilter = input.bool(true, "Use RSI Filter", group=groupSignal)
+rsiLen = input.int(14, "RSI Length", minval=1, group=groupContext)
+rsiLongThreshold = input.float(52.0, "RSI Long Threshold", group=groupSignal)
+rsiShortThreshold = input.float(48.0, "RSI Short Threshold", group=groupSignal)
+
+atrLen = input.int(14, "ATR Length", minval=1, group=groupContext)
+volSmaLen = input.int(20, "Volume SMA Length", minval=1, group=groupContext)
+slopeLookback = input.int(3, "EMA Slope Lookback", minval=1, group=groupContext)
+
+sendLongAlerts = input.bool(true, "Send Long Alerts", group=groupSignal)
+sendShortAlerts = input.bool(true, "Send Short Alerts", group=groupSignal)
+
+signalSourceInput = input.string("tradingview", "Signal Source", group=groupPayload)
+signalNamespace = input.string("ghostprint", "Signal Namespace", group=groupPayload)
+strategyId = input.string("bridge_signal_sender_v2", "Strategy ID", group=groupPayload)
+releaseId = input.string("bridge_signal_sender_v2.1.0", "Release ID", group=groupPayload)
+releaseVersion = input.string("2.1.0", "Release Version", group=groupPayload)
+releaseChannel = input.string("production", "Release Channel", group=groupPayload)
+contractVersion = input.string("tv-bridge-batch-v1", "Contract Version", group=groupPayload)
+telemetrySchemaVersion = input.string("tv-telemetry-v1", "Telemetry Schema Version", group=groupPayload)
+
+signalFamily = input.string("momentum", "Signal Family", group=groupPayload)
+signalTypeLong = input.string("continuation", "Long Signal Type", group=groupPayload)
+signalTypeShort = input.string("continuation", "Short Signal Type", group=groupPayload)
+
+showDebugLabel = input.bool(false, "Show Debug Label", group=groupDisplay)
+showDebugPlots = input.bool(false, "Show EMA Plots", group=groupDisplay)
+useConfirmedBarsOnly = input.bool(true, "Only Send On Confirmed Bar Close", group=groupSignal)
+
+//====================================================
+// CALCULATIONS
+//====================================================
+fastEma = ta.ema(close, fastLen)
+slowEma = ta.ema(close, slowLen)
+trendEma = ta.ema(close, trendLen)
+rsiVal = ta.rsi(close, rsiLen)
+atrVal = ta.atr(atrLen)
+volSma = ta.sma(volume, volSmaLen)
+
+longSignal = ta.crossover(fastEma, slowEma) and (not useRsiFilter or rsiVal >= rsiLongThreshold)
+shortSignal = ta.crossunder(fastEma, slowEma) and (not useRsiFilter or rsiVal <= rsiShortThreshold)
+
+candleRange = math.max(high - low, syminfo.mintick)
+candleBody = math.abs(close - open)
+upperWick = high - math.max(open, close)
+lowerWick = math.min(open, close) - low
+bodyToRange = candleBody / candleRange
+upperWickToRange = upperWick / candleRange
+lowerWickToRange = lowerWick / candleRange
+
+hl2Value = (high + low) / 2.0
+hlc3Value = (high + low + close) / 3.0
+ohlc4Value = (open + high + low + close) / 4.0
+
+emaSpread = fastEma - slowEma
+emaSpreadAbs = math.abs(emaSpread)
+
+fastSlope = fastEma - fastEma[slopeLookback]
+slowSlope = slowEma - slowEma[slopeLookback]
+
+atrPct = close != 0 ? atrVal / close : 0.0
+relVolume = volSma > 0 ? volume / volSma : 0.0
+
+distFast = close - fastEma
+distSlow = close - slowEma
+distFastBps = fastEma != 0 ? ((close - fastEma) / fastEma) * 10000.0 : 0.0
+distSlowBps = slowEma != 0 ? ((close - slowEma) / slowEma) * 10000.0 : 0.0
+emaSpreadBps = slowEma != 0 ? ((fastEma - slowEma) / slowEma) * 10000.0 : 0.0
+
+isBullBody = close > open
+isBearBody = close < open
+isExpansionBar = candleRange > atrVal * 1.2
+isCompressionBar = candleRange < atrVal * 0.7
+emaBullStack = fastEma > slowEma and slowEma > trendEma
+emaBearStack = fastEma < slowEma and slowEma < trendEma
+
+regimeTag = atrPct > 0.006 and emaSpreadAbs > atrVal * 0.25 ? "expansion_trend" :
+     atrPct > 0.004 and emaSpreadAbs <= atrVal * 0.25 ? "expansion_balanced" :
+     atrPct <= 0.004 and candleRange < atrVal * 0.8 ? "squeeze" :
+     "balanced"
+
+trendTag = fastEma > slowEma and fastSlope > 0 and slowSlope > 0 ? "bull_trend" :
+     fastEma < slowEma and fastSlope < 0 and slowSlope < 0 ? "bear_trend" :
+     "mixed"
+
+priceVsTrend =
+    close > trendEma ? "above_trend_ema" :
+    close < trendEma ? "below_trend_ema" :
+    "at_trend_ema"
+
+momentumRegime =
+    rsiVal >= 60 ? "bullish_momentum" :
+    rsiVal <= 40 ? "bearish_momentum" :
+    "neutral_momentum"
+
+volumeRegime =
+    relVolume >= 1.5 ? "high_relative_volume" :
+    relVolume >= 1.0 ? "normal_relative_volume" :
+    "low_relative_volume"
+
+candleBias =
+    close > open ? "bullish_candle" :
+    close < open ? "bearish_candle" :
+    "neutral_candle"
+
+wickBias =
+    lowerWick > upperWick ? "lower_wick_dominant" :
+    upperWick > lowerWick ? "upper_wick_dominant" :
+    "balanced_wicks"
+
+isSignalBar = useConfirmedBarsOnly ? barstate.isconfirmed : true
+signalTimestamp = useConfirmedBarsOnly ? time_close : time
+
+//====================================================
+// VISUALS
+//====================================================
+plot(showDebugPlots ? fastEma : na, "Fast EMA", color=color.aqua, linewidth=2)
+plot(showDebugPlots ? slowEma : na, "Slow EMA", color=color.orange, linewidth=2)
+plot(showDebugPlots ? trendEma : na, "Trend EMA", color=color.blue, linewidth=2)
+
+plotshape(longSignal and isSignalBar, title="Long Signal", location=location.belowbar, color=color.lime, style=shape.triangleup, size=size.small, text="LONG")
+plotshape(shortSignal and isSignalBar, title="Short Signal", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.small, text="SHORT")
+
+//====================================================
+// HELPERS
+//====================================================
+f_num(x) =>
+    na(x) ? "null" : str.tostring(x)
+
+f_int(x) =>
+    na(x) ? "null" : str.tostring(int(math.round(x)))
+
+f_bool(x) =>
+    x ? "true" : "false"
+
+f_clamp01(x) =>
+    math.max(0.0, math.min(1.0, x))
+
+f_text(x) =>
+    rawText = str.tostring(x)
+    escapedSlash = str.replace_all(rawText, "\\", "\\\\")
+    str.replace_all(escapedSlash, '"', '\\"')
+
+f_sideTrigger(_side) =>
+    _side == "buy" ? "buy" : "sell"
+
+f_signalName(_side) =>
+    _side == "buy" ? "ema_cross_long" : "ema_cross_short"
+
+f_signalType(_side) =>
+    _side == "buy" ? signalTypeLong : signalTypeShort
+
+f_eventId(_side, _timestamp) =>
+    "evt-" + syminfo.ticker + "-" + str.tostring(_timestamp) + "-" + _side
+
+f_batchId(_side, _timestamp) =>
+    "batch-" + syminfo.ticker + "-" + str.tostring(_timestamp) + "-" + _side
+
+f_buildPayload(_side) =>
+    batchId = f_batchId(_side, signalTimestamp)
+    eventId = f_eventId(_side, signalTimestamp)
+    signalName = f_signalName(_side)
+    signalType = f_signalType(_side)
+    sideTrendAligned = _side == "buy" ? emaBullStack : emaBearStack
+    sideMomentumAligned = _side == "buy" ? rsiVal >= rsiLongThreshold : rsiVal <= rsiShortThreshold
+    sideTrendLocationAligned = _side == "buy" ? close > trendEma : close < trendEma
+    sideContradictionSlope = _side == "buy" ? (fastSlope < 0 or slowSlope < 0) : (fastSlope > 0 or slowSlope > 0)
+    sideReversalCandle = _side == "buy" ? isBearBody : isBullBody
+    sideWickPressure = _side == "buy" ? upperWickToRange : lowerWickToRange
+    trendSlopeDirectional = _side == "buy" ? fastSlope + slowSlope : -(fastSlope + slowSlope)
+    trendSlopeScore = f_clamp01(0.5 + (atrVal != 0 ? trendSlopeDirectional / (atrVal * 2.0) : 0.0))
+    continuationConfidence = f_clamp01(
+        0.15 +
+        (sideTrendAligned ? 0.30 : 0.0) +
+        (sideMomentumAligned ? 0.20 : 0.0) +
+        math.min(relVolume / 2.0, 1.0) * 0.20 +
+        trendSlopeScore * 0.15 +
+        (isExpansionBar ? 0.10 : 0.0))
+    meanReversionRisk = f_clamp01(
+        math.min(math.abs(emaSpreadBps) / 45.0, 1.0) * 0.40 +
+        sideWickPressure * 0.35 +
+        (sideReversalCandle ? 0.25 : 0.0))
+    regimeBiasScore = f_clamp01(
+        (sideTrendLocationAligned ? 0.35 : 0.0) +
+        (sideTrendAligned ? 0.25 : 0.0) +
+        (isExpansionBar ? 0.15 : 0.05) +
+        (relVolume >= 1.0 ? 0.15 : 0.0) +
+        (atrPct >= 0.004 ? 0.10 : 0.0))
+    contradictionPressure = f_clamp01(
+        (sideContradictionSlope ? 0.30 : 0.0) +
+        sideWickPressure * 0.30 +
+        (sideReversalCandle ? 0.20 : 0.0) +
+        (sideTrendLocationAligned ? 0.0 : 0.20))
+    signalQualityScore = f_clamp01(
+        (continuationConfidence + regimeBiasScore + trendSlopeScore - meanReversionRisk - contradictionPressure + 2.0) / 3.0)
+
+    payload = "{"
+    payload := payload + '"source":"' + f_text(signalSourceInput) + '"'
+    payload := payload + ',"namespace":"' + f_text(signalNamespace) + '"'
+    payload := payload + ',"symbol":"' + f_text(syminfo.ticker) + '"'
+    payload := payload + ',"chart_tf":"' + f_text(timeframe.period) + '"'
+    payload := payload + ',"batch_id":"' + f_text(batchId) + '"'
+    payload := payload + ',"batch_trigger_side":"' + f_sideTrigger(_side) + '"'
+    payload := payload + ',"batch_size":1'
+    payload := payload + ',"batch_close_time":' + f_int(signalTimestamp)
+    payload := payload + ',"confirmed":' + f_bool(barstate.isconfirmed)
+    payload := payload + ',"release_id":"' + f_text(releaseId) + '"'
+    payload := payload + ',"release_version":"' + f_text(releaseVersion) + '"'
+    payload := payload + ',"release_channel":"' + f_text(releaseChannel) + '"'
+    payload := payload + ',"contract_version":"' + f_text(contractVersion) + '"'
+    payload := payload + ',"telemetry_schema_version":"' + f_text(telemetrySchemaVersion) + '"'
+    payload := payload + ',"events":[{'
+    payload := payload + '"event_id":"' + f_text(eventId) + '"'
+    payload := payload + ',"event_time":' + f_int(signalTimestamp)
+    payload := payload + ',"side":"' + _side + '"'
+    payload := payload + ',"signal_type":"' + f_text(signalType) + '"'
+    payload := payload + ',"signal_family":"' + f_text(signalFamily) + '"'
+    payload := payload + ',"signal_name":"' + f_text(signalName) + '"'
+    payload := payload + ',"strategy_id":"' + f_text(strategyId) + '"'
+    payload := payload + ',"price":' + f_num(close)
+    payload := payload + ',"confirmed":' + f_bool(barstate.isconfirmed)
+    payload := payload + ',"micro":{'
+    payload := payload + '"ticker":"' + f_text(syminfo.ticker) + '"'
+    payload := payload + ',"tickerid":"' + f_text(syminfo.tickerid) + '"'
+    payload := payload + ',"exchange":"' + f_text(syminfo.prefix) + '"'
+    payload := payload + ',"base_currency":"' + f_text(syminfo.basecurrency) + '"'
+    payload := payload + ',"quote_currency":"' + f_text(syminfo.currency) + '"'
+    payload := payload + ',"timeframe":"' + f_text(timeframe.period) + '"'
+    payload := payload + ',"strategy_id":"' + f_text(strategyId) + '"'
+    payload := payload + ',"signal_name":"' + f_text(signalName) + '"'
+    payload := payload + ',"open":' + f_num(open)
+    payload := payload + ',"high":' + f_num(high)
+    payload := payload + ',"low":' + f_num(low)
+    payload := payload + ',"close":' + f_num(close)
+    payload := payload + ',"hl2":' + f_num(hl2Value)
+    payload := payload + ',"hlc3":' + f_num(hlc3Value)
+    payload := payload + ',"ohlc4":' + f_num(ohlc4Value)
+    payload := payload + ',"volume":' + f_num(volume)
+    payload := payload + ',"bar_time":' + f_int(signalTimestamp)
+    payload := payload + ',"bar_open_time":' + f_int(time)
+    payload := payload + ',"bar_close_time":' + f_int(time_close)
+    payload := payload + ',"bar_index":' + f_int(bar_index)
+    payload := payload + ',"fast_ema":' + f_num(fastEma)
+    payload := payload + ',"slow_ema":' + f_num(slowEma)
+    payload := payload + ',"trend_ema":' + f_num(trendEma)
+    payload := payload + ',"rsi":' + f_num(rsiVal)
+    payload := payload + ',"atr":' + f_num(atrVal)
+    payload := payload + ',"atr_pct":' + f_num(atrPct)
+    payload := payload + ',"vol_sma":' + f_num(volSma)
+    payload := payload + ',"rel_volume":' + f_num(relVolume)
+    payload := payload + ',"ema_spread":' + f_num(emaSpread)
+    payload := payload + ',"ema_spread_abs":' + f_num(emaSpreadAbs)
+    payload := payload + ',"ema_spread_bps":' + f_num(emaSpreadBps)
+    payload := payload + ',"fast_slope":' + f_num(fastSlope)
+    payload := payload + ',"slow_slope":' + f_num(slowSlope)
+    payload := payload + ',"dist_fast":' + f_num(distFast)
+    payload := payload + ',"dist_slow":' + f_num(distSlow)
+    payload := payload + ',"dist_fast_bps":' + f_num(distFastBps)
+    payload := payload + ',"dist_slow_bps":' + f_num(distSlowBps)
+    payload := payload + ',"candle_range":' + f_num(candleRange)
+    payload := payload + ',"candle_body":' + f_num(candleBody)
+    payload := payload + ',"upper_wick":' + f_num(upperWick)
+    payload := payload + ',"lower_wick":' + f_num(lowerWick)
+    payload := payload + ',"body_to_range":' + f_num(bodyToRange)
+    payload := payload + ',"upper_wick_to_range":' + f_num(upperWickToRange)
+    payload := payload + ',"lower_wick_to_range":' + f_num(lowerWickToRange)
+    payload := payload + ',"is_bull_body":' + f_bool(isBullBody)
+    payload := payload + ',"is_bear_body":' + f_bool(isBearBody)
+    payload := payload + ',"is_expansion_bar":' + f_bool(isExpansionBar)
+    payload := payload + ',"is_compression_bar":' + f_bool(isCompressionBar)
+    payload := payload + '}'
+    payload := payload + ',"macro":{'
+    payload := payload + '"trend_direction":"' + f_text(trendTag) + '"'
+    payload := payload + ',"regime_tag":"' + f_text(regimeTag) + '"'
+    payload := payload + ',"price_vs_trend":"' + f_text(priceVsTrend) + '"'
+    payload := payload + ',"momentum_regime":"' + f_text(momentumRegime) + '"'
+    payload := payload + ',"volume_regime":"' + f_text(volumeRegime) + '"'
+    payload := payload + ',"candle_bias":"' + f_text(candleBias) + '"'
+    payload := payload + ',"wick_bias":"' + f_text(wickBias) + '"'
+    payload := payload + ',"ema_bull_stack":' + f_bool(emaBullStack)
+    payload := payload + ',"ema_bear_stack":' + f_bool(emaBearStack)
+    payload := payload + ',"use_rsi_filter":' + f_bool(useRsiFilter)
+    payload := payload + ',"rsi_long_threshold":' + f_num(rsiLongThreshold)
+    payload := payload + ',"rsi_short_threshold":' + f_num(rsiShortThreshold)
+    payload := payload + ',"fast_len":' + f_int(fastLen)
+    payload := payload + ',"slow_len":' + f_int(slowLen)
+    payload := payload + ',"trend_len":' + f_int(trendLen)
+    payload := payload + ',"rsi_len":' + f_int(rsiLen)
+    payload := payload + ',"atr_len":' + f_int(atrLen)
+    payload := payload + ',"vol_sma_len":' + f_int(volSmaLen)
+    payload := payload + ',"slope_lookback":' + f_int(slopeLookback)
+    payload := payload + ',"confirmed_bars_only":' + f_bool(useConfirmedBarsOnly)
+    payload := payload + '}'
+    payload := payload + ',"research":{'
+    payload := payload + '"signal_quality_score":' + f_num(signalQualityScore)
+    payload := payload + ',"trend_slope_score":' + f_num(trendSlopeScore)
+    payload := payload + ',"continuation_confidence":' + f_num(continuationConfidence)
+    payload := payload + ',"mean_reversion_risk":' + f_num(meanReversionRisk)
+    payload := payload + ',"regime_bias_score":' + f_num(regimeBiasScore)
+    payload := payload + ',"contradiction_pressure":' + f_num(contradictionPressure)
+    payload := payload + '}'
+    payload := payload + '}]}'
+    payload
+
+//====================================================
+// ALERTS
+//====================================================
+if longSignal and sendLongAlerts and isSignalBar
+    payloadLong = f_buildPayload("buy")
+    if useConfirmedBarsOnly
+        alert(payloadLong, alert.freq_once_per_bar_close)
+    else
+        alert(payloadLong, alert.freq_once_per_bar)
+    if showDebugLabel
+        label.new(bar_index, low, "BUY SENT", style=label.style_label_up, color=color.lime, textcolor=color.black)
+
+if shortSignal and sendShortAlerts and isSignalBar
+    payloadShort = f_buildPayload("sell")
+    if useConfirmedBarsOnly
+        alert(payloadShort, alert.freq_once_per_bar_close)
+    else
+        alert(payloadShort, alert.freq_once_per_bar)
+    if showDebugLabel
+        label.new(bar_index, high, "SELL SENT", style=label.style_label_down, color=color.red, textcolor=color.white)
+
+alertcondition(longSignal and isSignalBar, title="Bridge Long Signal", message="Bridge long signal triggered")
+alertcondition(shortSignal and isSignalBar, title="Bridge Short Signal", message="Bridge short signal triggered")

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.coverage
+.venv/
+venv/
+
+# VS Code
+.vscode/
+.history/
+
+# SonarQube / analysis
+.scannerwork/
+sonar-report*
+
+# Project data
+data/cache/
+data/state/
+database/*.db
+data/logs/
+data/raw/
+data/processed/
+data/tv_ingest/
+uvicorn_*.log

@@ -1,0 +1,547 @@
+// This work includes logic inspired by user-provided code and user-requested integrations.
+// Merged structure map + webhook logger
+//@version=6
+indicator("Bridge Signal Sender + Volumatic Structure Map", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+
+//====================================================
+// INPUTS
+//====================================================
+groupVolumatic = "Volumatic Levels"
+length = input.int(25, "Volumatic Length", group=groupVolumatic)
+upper_threshold = input.int(80, "Resistance Max Volume %", maxval=100, minval=50, inline="sup", group=groupVolumatic)
+sup_col = input.color(color.rgb(28, 194, 114), "", inline="sup", group=groupVolumatic)
+lower_threshold = input.int(80, "Support Max Volume %", maxval=100, minval=50, inline="res", group=groupVolumatic)
+res_col = input.color(color.rgb(206, 37, 37), "", inline="res", group=groupVolumatic)
+bars_threshold = input.int(50, "Bars Max Volume %", maxval=100, minval=50, inline="bar", group=groupVolumatic)
+bar_col = input.color(color.rgb(255, 145, 55), "", inline="bar", group=groupVolumatic)
+
+groupSignal  = "Signal Logic"
+groupContext = "Context"
+groupPayload = "Payload"
+groupDisplay = "Display"
+groupStruct  = "Prediction Structure"
+
+fastLen              = input.int(9, "Fast EMA Length", minval=1, group=groupContext)
+slowLen              = input.int(21, "Slow EMA Length", minval=1, group=groupContext)
+trendLen             = input.int(50, "Trend EMA Length", minval=1, group=groupContext)
+rsiLen               = input.int(14, "RSI Length", minval=1, group=groupContext)
+atrLen               = input.int(14, "ATR Length", minval=1, group=groupContext)
+volSmaLen            = input.int(20, "Volume SMA Length", minval=1, group=groupContext)
+
+internalSwingLen     = input.int(2, "Internal Swing Length", minval=1, maxval=20, group=groupStruct)
+majorSwingLen        = input.int(5, "Major Swing Length", minval=2, maxval=30, group=groupStruct)
+projectionAtrMult    = input.float(1.20, "Projection ATR Multiplier", minval=0.10, step=0.05, group=groupStruct)
+continuationAtrMult  = input.float(0.25, "Continuation ATR Multiplier", minval=0.05, step=0.05, group=groupStruct)
+zoneAtrMult          = input.float(0.35, "Displacement Zone ATR Multiplier", minval=0.05, step=0.05, group=groupStruct)
+invalidAtrPad        = input.float(0.15, "Invalidation ATR Padding", minval=0.01, step=0.01, group=groupStruct)
+extendRightMajor     = input.int(32, "Major Level Extend Right", minval=5, maxval=200, group=groupStruct)
+extendRightMinor     = input.int(18, "Minor Level Extend Right", minval=3, maxval=100, group=groupStruct)
+extendLeftBars       = input.int(0, "Extend Left Bars", minval=0, maxval=20, group=groupStruct)
+
+strategyIdInput      = input.string("bridge_signal_sender_v3", "Strategy ID", group=groupPayload)
+signalSourceInput    = input.string("tradingview", "Signal Source", group=groupPayload)
+
+useConfirmedBarsOnly = input.bool(true, "Only Fire On Confirmed Bars", group=groupSignal)
+sendLongSignals      = input.bool(true, "Send Long Signals", group=groupSignal)
+sendShortSignals     = input.bool(true, "Send Short Signals", group=groupSignal)
+
+showLabels           = input.bool(true, "Show Signal Labels", group=groupDisplay)
+showDebugPlots       = input.bool(false, "Show EMA Plots", group=groupDisplay)
+showVolumaticPlots   = input.bool(true, "Show Volumatic Levels", group=groupDisplay)
+showStructureMap     = input.bool(true, "Show Prediction Structure Map", group=groupDisplay)
+showPredictionSquare = input.bool(true, "Show Prediction Square", group=groupDisplay)
+showDisplacementBox  = input.bool(true, "Show Displacement Box", group=groupDisplay)
+minimalMode          = input.bool(true, "Minimal Paint Mode", group=groupDisplay)
+maxStructureObjects  = input.int(40, "Max Structure Events Kept", minval=5, maxval=100, group=groupDisplay)
+
+//====================================================
+// JSON HELPERS
+//====================================================
+jsonEscape(_s) =>
+    s0 = na(_s) ? "" : _s
+    s1 = str.replace_all(s0, "\\", "\\\\")
+    s2 = str.replace_all(s1, "\"", "\\\"")
+    s3 = str.replace_all(s2, "\n", "\\n")
+    s4 = str.replace_all(s3, "\r", "\\r")
+    s4
+
+jsonString(_s) =>
+    "\"" + jsonEscape(_s) + "\""
+
+jsonNumber(_x) =>
+    na(_x) ? "null" : str.tostring(_x)
+
+jsonInt(_x) =>
+    na(_x) ? "null" : str.tostring(int(math.round(_x)))
+
+jsonBool(_b) =>
+    _b ? "true" : "false"
+
+roundToTick(_x) =>
+    na(_x) ? na : math.round(_x / syminfo.mintick) * syminfo.mintick
+
+//====================================================
+// VOLUMATIC LOGIC (integrated from user-provided source)
+//====================================================
+var float upper1 = na
+var float upper2 = na
+var float lower1 = na
+var float lower2 = na
+
+h = ta.highest(high, length)
+l = ta.lowest(low, length)
+
+volPctDenom = ta.percentile_linear_interpolation(volume, 500, 100)
+n_vol = volPctDenom != 0 ? volume / volPctDenom * 100 : 0.0
+
+if h[1] == high[1] and high < h
+    upper1 := h
+    upper2 := h
+
+if l[1] == low[1] and low > l
+    lower1 := l
+    lower2 := l
+
+atr200pct = ta.atr(200) / 100.0
+upper_col = upper1 != upper1[1] ? color(na) : res_col
+lower_col = lower1 != lower1[1] ? color(na) : sup_col
+
+upperFillColor = upper1 != upper1[1] ? na : color.from_gradient(n_vol, 0, 100, color.new(res_col, 80), res_col)
+lowerFillColor = lower1 != lower1[1] ? na : color.from_gradient(n_vol, 0, 100, color.new(sup_col, 80), sup_col)
+
+pUpper = plot(showVolumaticPlots ? upper1 : na, "Resistance", color=upper_col)
+pUpperHi = plot(showVolumaticPlots ? upper1 + atr200pct * n_vol : na, color=na, editable=false)
+pUpperLo = plot(showVolumaticPlots ? upper2 - atr200pct * n_vol : na, color=na, editable=false)
+
+pLower = plot(showVolumaticPlots ? lower1 : na, "Support", color=lower_col)
+pLowerHi = plot(showVolumaticPlots ? lower2 + atr200pct * n_vol : na, color=na, editable=false)
+pLowerLo = plot(showVolumaticPlots ? lower2 - atr200pct * n_vol : na, color=na, editable=false)
+
+fill(pUpperHi, pUpperLo, color=showVolumaticPlots ? upperFillColor : na)
+fill(pLowerHi, pLowerLo, color=showVolumaticPlots ? lowerFillColor : na)
+
+plotshape(showVolumaticPlots and n_vol > lower_threshold ? lower2 - atr200pct * n_vol : na, "Max Volume Support Low", shape.circle, location.absolute, color=sup_col, size=size.tiny)
+plotshape(showVolumaticPlots and n_vol > lower_threshold ? lower2 + atr200pct * n_vol : na, "Max Volume Support High", shape.circle, location.absolute, color=sup_col, size=size.tiny)
+
+plotshape(showVolumaticPlots and n_vol > upper_threshold ? upper2 + atr200pct * n_vol : na, "Max Volume Resistance High", shape.circle, location.absolute, color=res_col, size=size.tiny)
+plotshape(showVolumaticPlots and n_vol > upper_threshold ? upper2 - atr200pct * n_vol : na, "Max Volume Resistance Low", shape.circle, location.absolute, color=res_col, size=size.tiny)
+
+barcolor(n_vol > bars_threshold ? bar_col : na)
+
+//====================================================
+// CORE CALCULATIONS
+//====================================================
+emaFast  = ta.ema(close, fastLen)
+emaSlow  = ta.ema(close, slowLen)
+emaTrend = ta.ema(close, trendLen)
+
+rsiVal   = ta.rsi(close, rsiLen)
+atrVal   = ta.atr(atrLen)
+volSma   = ta.sma(volume, volSmaLen)
+
+bodySize       = math.abs(close - open)
+upperWick      = high - math.max(open, close)
+lowerWick      = math.min(open, close) - low
+rangeSize      = high - low
+
+bodyPctOfRange = rangeSize != 0.0 ? bodySize / rangeSize : na
+upperWickPct   = rangeSize != 0.0 ? upperWick / rangeSize : na
+lowerWickPct   = rangeSize != 0.0 ? lowerWick / rangeSize : na
+
+atrPct         = close != 0.0 ? atrVal / close : na
+volumeRatio    = volSma != 0.0 ? volume / volSma : na
+
+emaBullStack   = emaFast > emaSlow and emaSlow > emaTrend
+emaBearStack   = emaFast < emaSlow and emaSlow < emaTrend
+
+trendDirection =
+     emaBullStack ? "bullish" :
+     emaBearStack ? "bearish" :
+     "neutral"
+
+priceVsTrend =
+     close > emaTrend ? "above_trend_ema" :
+     close < emaTrend ? "below_trend_ema" :
+     "at_trend_ema"
+
+momentumRegime =
+     rsiVal >= 60 ? "bullish_momentum" :
+     rsiVal <= 40 ? "bearish_momentum" :
+     "neutral_momentum"
+
+volatilityRegime =
+     na(atrPct) ? "unknown" :
+     atrPct >= 0.012 ? "high_volatility" :
+     atrPct >= 0.006 ? "medium_volatility" :
+     "low_volatility"
+
+volumeRegime =
+     na(volumeRatio) ? "unknown" :
+     volumeRatio >= 1.5 ? "high_relative_volume" :
+     volumeRatio >= 1.0 ? "normal_relative_volume" :
+     "low_relative_volume"
+
+candleBias =
+     close > open ? "bullish_candle" :
+     close < open ? "bearish_candle" :
+     "neutral_candle"
+
+wickBias =
+     lowerWick > upperWick ? "lower_wick_dominant" :
+     upperWick > lowerWick ? "upper_wick_dominant" :
+     "balanced_wicks"
+
+//====================================================
+// SWING STRUCTURE
+//====================================================
+phInternal = ta.pivothigh(high, internalSwingLen, internalSwingLen)
+plInternal = ta.pivotlow(low, internalSwingLen, internalSwingLen)
+phMajor    = ta.pivothigh(high, majorSwingLen, majorSwingLen)
+plMajor    = ta.pivotlow(low, majorSwingLen, majorSwingLen)
+
+var float lastInternalHigh = na
+var float lastInternalLow  = na
+var float lastMajorHigh    = na
+var float lastMajorLow     = na
+
+if not na(phInternal)
+    lastInternalHigh := phInternal
+if not na(plInternal)
+    lastInternalLow := plInternal
+if not na(phMajor)
+    lastMajorHigh := phMajor
+if not na(plMajor)
+    lastMajorLow := plMajor
+
+bullDisplacement = close > open and bodySize >= atrVal * 0.80 and (rangeSize > 0 ? (close - low) / rangeSize : 0.5) >= 0.65
+bearDisplacement = close < open and bodySize >= atrVal * 0.80 and (rangeSize > 0 ? (high - close) / rangeSize : 0.5) >= 0.65
+
+//====================================================
+// SIGNAL LOGIC
+//====================================================
+longSignalRaw  = ta.crossover(emaFast, emaSlow) and close > emaTrend
+shortSignalRaw = ta.crossunder(emaFast, emaSlow) and close < emaTrend
+
+barAllowed = useConfirmedBarsOnly ? barstate.isconfirmed : true
+
+longSignal  = sendLongSignals and longSignalRaw and barAllowed
+shortSignal = sendShortSignals and shortSignalRaw and barAllowed
+
+signalName =
+     longSignal ? "long_entry" :
+     shortSignal ? "short_entry" :
+     "none"
+
+signalSide =
+     longSignal ? "long" :
+     shortSignal ? "short" :
+     "flat"
+
+//====================================================
+// PREDICTION STRUCTURE LEVELS
+//====================================================
+activeResistance = upper1
+activeSupport    = lower1
+
+longPredictionSwing =
+     not na(activeResistance) and activeResistance > close ? activeResistance :
+     not na(lastMajorHigh) and lastMajorHigh > close ? lastMajorHigh :
+     close + atrVal * projectionAtrMult
+
+shortPredictionSwing =
+     not na(activeSupport) and activeSupport < close ? activeSupport :
+     not na(lastMajorLow) and lastMajorLow < close ? lastMajorLow :
+     close - atrVal * projectionAtrMult
+
+longInducement =
+     not na(lastInternalLow) and lastInternalLow < close ? lastInternalLow :
+     not na(activeSupport) and activeSupport < close ? activeSupport :
+     low
+
+shortInducement =
+     not na(lastInternalHigh) and lastInternalHigh > close ? lastInternalHigh :
+     not na(activeResistance) and activeResistance > close ? activeResistance :
+     high
+
+longContinuation = close + atrVal * continuationAtrMult
+shortContinuation = close - atrVal * continuationAtrMult
+
+longDisplacementOrigin = math.min(low, ta.lowest(low, 3))
+shortDisplacementOrigin = math.max(high, ta.highest(high, 3))
+
+longDisplacementTop = longDisplacementOrigin + atrVal * zoneAtrMult
+shortDisplacementBottom = shortDisplacementOrigin - atrVal * zoneAtrMult
+
+longInvalidation = math.min(longInducement, longDisplacementOrigin) - atrVal * invalidAtrPad
+shortInvalidation = math.max(shortInducement, shortDisplacementOrigin) + atrVal * invalidAtrPad
+
+longProbabilityScore =
+    math.max(0.0, math.min(100.0,
+        (close > open ? 18.0 : 0.0) +
+        (bullDisplacement ? 22.0 : 0.0) +
+        (volumeRatio >= 1.0 ? 12.0 : 0.0) +
+        (emaBullStack ? 12.0 : 0.0) +
+        (rsiVal >= 55 ? 10.0 : 0.0) +
+        (not na(activeResistance) ? 8.0 : 0.0) +
+        (not na(lastInternalLow) ? 8.0 : 0.0) +
+        (bodyPctOfRange >= 0.60 ? 10.0 : 0.0)
+    ))
+
+shortProbabilityScore =
+    math.max(0.0, math.min(100.0,
+        (close < open ? 18.0 : 0.0) +
+        (bearDisplacement ? 22.0 : 0.0) +
+        (volumeRatio >= 1.0 ? 12.0 : 0.0) +
+        (emaBearStack ? 12.0 : 0.0) +
+        (rsiVal <= 45 ? 10.0 : 0.0) +
+        (not na(activeSupport) ? 8.0 : 0.0) +
+        (not na(lastInternalHigh) ? 8.0 : 0.0) +
+        (bodyPctOfRange >= 0.60 ? 10.0 : 0.0)
+    ))
+
+//====================================================
+// STRUCTURE DRAW OBJECT STORAGE
+//====================================================
+var line[] structureLines = array.new_line()
+var box[] structureBoxes = array.new_box()
+var label[] structureLabels = array.new_label()
+
+storeLine(_id) =>
+    array.push(structureLines, _id)
+    if array.size(structureLines) > maxStructureObjects * 6
+        old = array.shift(structureLines)
+        line.delete(old)
+
+storeBox(_id) =>
+    array.push(structureBoxes, _id)
+    if array.size(structureBoxes) > maxStructureObjects * 3
+        old = array.shift(structureBoxes)
+        box.delete(old)
+
+storeLabel(_id) =>
+    array.push(structureLabels, _id)
+    if array.size(structureLabels) > maxStructureObjects * 2
+        old = array.shift(structureLabels)
+        label.delete(old)
+
+makeSeg(_x1, _y, _x2, _col, _width, _style) =>
+    line.new(_x1, roundToTick(_y), _x2, roundToTick(_y), xloc=xloc.bar_index, extend=extend.none, color=_col, width=_width, style=_style)
+
+makeBox(_left, _top, _right, _bottom, _bg, _border) =>
+    box.new(_left, roundToTick(_top), _right, roundToTick(_bottom), xloc=xloc.bar_index, bgcolor=_bg, border_color=_border)
+
+makeLbl(_x, _y, _txt, _style, _bg) =>
+    label.new(_x, roundToTick(_y), _txt, xloc=xloc.bar_index, style=_style, color=_bg, textcolor=color.white, size=size.small)
+
+//====================================================
+// STRUCTURE PAINTING
+//====================================================
+if showStructureMap and longSignal
+    ln1 = makeSeg(bar_index - extendLeftBars, longPredictionSwing, bar_index + extendRightMajor, color.black, 4, line.style_solid)
+    storeLine(ln1)
+
+    ln2 = makeSeg(bar_index - extendLeftBars, longInducement, bar_index + extendRightMinor, color.white, 3, line.style_solid)
+    storeLine(ln2)
+
+    ln3 = makeSeg(bar_index, longContinuation, bar_index + extendRightMinor, color.white, 2, line.style_dotted)
+    storeLine(ln3)
+
+    ln4 = makeSeg(bar_index, longInvalidation, bar_index + extendRightMajor, color.white, 3, line.style_solid)
+    storeLine(ln4)
+
+    if showDisplacementBox
+        bx1 = makeBox(
+            bar_index,
+            longDisplacementTop,
+            bar_index + 2,
+            longDisplacementOrigin,
+            minimalMode ? color.new(color.white, 95) : color.new(color.green, 82),
+            color.new(color.white, 0)
+        )
+        storeBox(bx1)
+
+    if showPredictionSquare
+        sq1 = makeBox(
+            bar_index + 1,
+            longPredictionSwing + atrVal * 0.08,
+            bar_index + 2,
+            longPredictionSwing - atrVal * 0.08,
+            color.new(color.white, 100),
+            color.new(color.white, 0)
+        )
+        storeBox(sq1)
+
+if showStructureMap and shortSignal
+    ln1 = makeSeg(bar_index - extendLeftBars, shortPredictionSwing, bar_index + extendRightMajor, color.black, 4, line.style_solid)
+    storeLine(ln1)
+
+    ln2 = makeSeg(bar_index - extendLeftBars, shortInducement, bar_index + extendRightMinor, color.white, 3, line.style_solid)
+    storeLine(ln2)
+
+    ln3 = makeSeg(bar_index, shortContinuation, bar_index + extendRightMinor, color.white, 2, line.style_dotted)
+    storeLine(ln3)
+
+    ln4 = makeSeg(bar_index, shortInvalidation, bar_index + extendRightMajor, color.white, 3, line.style_solid)
+    storeLine(ln4)
+
+    if showDisplacementBox
+        bx1 = makeBox(
+            bar_index,
+            shortDisplacementOrigin,
+            bar_index + 2,
+            shortDisplacementBottom,
+            minimalMode ? color.new(color.white, 95) : color.new(color.red, 82),
+            color.new(color.white, 0)
+        )
+        storeBox(bx1)
+
+    if showPredictionSquare
+        sq1 = makeBox(
+            bar_index + 1,
+            shortPredictionSwing + atrVal * 0.08,
+            bar_index + 2,
+            shortPredictionSwing - atrVal * 0.08,
+            color.new(color.white, 100),
+            color.new(color.white, 0)
+        )
+        storeBox(sq1)
+
+//====================================================
+// PAYLOAD BUILDER
+//====================================================
+buildPayload(_signalName, _signalSide) =>
+    predSwing   = _signalSide == "long" ? longPredictionSwing : shortPredictionSwing
+    induceLvl   = _signalSide == "long" ? longInducement : shortInducement
+    contLvl     = _signalSide == "long" ? longContinuation : shortContinuation
+    invalLvl    = _signalSide == "long" ? longInvalidation : shortInvalidation
+    dispOrigin  = _signalSide == "long" ? longDisplacementOrigin : shortDisplacementOrigin
+    dispFarEdge = _signalSide == "long" ? longDisplacementTop : shortDisplacementBottom
+    probScore   = _signalSide == "long" ? longProbabilityScore : shortProbabilityScore
+
+    payload = "{"
+    payload := payload + "\"strategy_id\":" + jsonString(strategyIdInput)
+    payload := payload + ",\"signal_source\":" + jsonString(signalSourceInput)
+    payload := payload + ",\"signal_name\":" + jsonString(_signalName)
+    payload := payload + ",\"signal_side\":" + jsonString(_signalSide)
+    payload := payload + ",\"symbol\":" + jsonString(syminfo.ticker)
+    payload := payload + ",\"tickerid\":" + jsonString(syminfo.tickerid)
+    payload := payload + ",\"exchange\":" + jsonString(syminfo.prefix)
+    payload := payload + ",\"base_currency\":" + jsonString(syminfo.basecurrency)
+    payload := payload + ",\"quote_currency\":" + jsonString(syminfo.currency)
+    payload := payload + ",\"timeframe\":" + jsonString(timeframe.period)
+    payload := payload + ",\"bar_index\":" + jsonInt(bar_index)
+    payload := payload + ",\"event_time\":" + jsonInt(time)
+    payload := payload + ",\"batch_close_time\":" + jsonInt(time_close)
+    payload := payload + ",\"is_confirmed_bar\":" + jsonBool(barstate.isconfirmed)
+
+    payload := payload + ",\"open\":" + jsonNumber(open)
+    payload := payload + ",\"high\":" + jsonNumber(high)
+    payload := payload + ",\"low\":" + jsonNumber(low)
+    payload := payload + ",\"close\":" + jsonNumber(close)
+    payload := payload + ",\"hl2\":" + jsonNumber(hl2)
+    payload := payload + ",\"hlc3\":" + jsonNumber(hlc3)
+    payload := payload + ",\"ohlc4\":" + jsonNumber(ohlc4)
+    payload := payload + ",\"volume\":" + jsonNumber(volume)
+
+    payload := payload + ",\"ema_fast\":" + jsonNumber(emaFast)
+    payload := payload + ",\"ema_slow\":" + jsonNumber(emaSlow)
+    payload := payload + ",\"ema_trend\":" + jsonNumber(emaTrend)
+    payload := payload + ",\"rsi\":" + jsonNumber(rsiVal)
+    payload := payload + ",\"atr\":" + jsonNumber(atrVal)
+    payload := payload + ",\"atr_pct\":" + jsonNumber(atrPct)
+    payload := payload + ",\"volume_sma\":" + jsonNumber(volSma)
+    payload := payload + ",\"volume_ratio\":" + jsonNumber(volumeRatio)
+
+    payload := payload + ",\"body_size\":" + jsonNumber(bodySize)
+    payload := payload + ",\"upper_wick\":" + jsonNumber(upperWick)
+    payload := payload + ",\"lower_wick\":" + jsonNumber(lowerWick)
+    payload := payload + ",\"range_size\":" + jsonNumber(rangeSize)
+    payload := payload + ",\"body_pct_of_range\":" + jsonNumber(bodyPctOfRange)
+    payload := payload + ",\"upper_wick_pct\":" + jsonNumber(upperWickPct)
+    payload := payload + ",\"lower_wick_pct\":" + jsonNumber(lowerWickPct)
+
+    payload := payload + ",\"ema_bull_stack\":" + jsonBool(emaBullStack)
+    payload := payload + ",\"ema_bear_stack\":" + jsonBool(emaBearStack)
+
+    payload := payload + ",\"trend_direction\":" + jsonString(trendDirection)
+    payload := payload + ",\"price_vs_trend\":" + jsonString(priceVsTrend)
+    payload := payload + ",\"momentum_regime\":" + jsonString(momentumRegime)
+    payload := payload + ",\"volatility_regime\":" + jsonString(volatilityRegime)
+    payload := payload + ",\"volume_regime\":" + jsonString(volumeRegime)
+    payload := payload + ",\"candle_bias\":" + jsonString(candleBias)
+    payload := payload + ",\"wick_bias\":" + jsonString(wickBias)
+
+    payload := payload + ",\"fast_len\":" + jsonInt(fastLen)
+    payload := payload + ",\"slow_len\":" + jsonInt(slowLen)
+    payload := payload + ",\"trend_len\":" + jsonInt(trendLen)
+    payload := payload + ",\"rsi_len\":" + jsonInt(rsiLen)
+    payload := payload + ",\"atr_len\":" + jsonInt(atrLen)
+    payload := payload + ",\"vol_sma_len\":" + jsonInt(volSmaLen)
+
+    payload := payload + ",\"volumatic_length\":" + jsonInt(length)
+    payload := payload + ",\"volumatic_n_vol\":" + jsonNumber(n_vol)
+    payload := payload + ",\"volumatic_upper_level\":" + jsonNumber(upper1)
+    payload := payload + ",\"volumatic_lower_level\":" + jsonNumber(lower1)
+    payload := payload + ",\"volumatic_upper_band_high\":" + jsonNumber(upper1 + atr200pct * n_vol)
+    payload := payload + ",\"volumatic_upper_band_low\":" + jsonNumber(upper2 - atr200pct * n_vol)
+    payload := payload + ",\"volumatic_lower_band_high\":" + jsonNumber(lower2 + atr200pct * n_vol)
+    payload := payload + ",\"volumatic_lower_band_low\":" + jsonNumber(lower2 - atr200pct * n_vol)
+
+    payload := payload + ",\"internal_swing_high\":" + jsonNumber(lastInternalHigh)
+    payload := payload + ",\"internal_swing_low\":" + jsonNumber(lastInternalLow)
+    payload := payload + ",\"major_swing_high\":" + jsonNumber(lastMajorHigh)
+    payload := payload + ",\"major_swing_low\":" + jsonNumber(lastMajorLow)
+
+    payload := payload + ",\"prediction_swing_level\":" + jsonNumber(predSwing)
+    payload := payload + ",\"inducement_level\":" + jsonNumber(induceLvl)
+    payload := payload + ",\"continuation_level\":" + jsonNumber(contLvl)
+    payload := payload + ",\"invalidation_level\":" + jsonNumber(invalLvl)
+    payload := payload + ",\"displacement_origin\":" + jsonNumber(dispOrigin)
+    payload := payload + ",\"displacement_far_edge\":" + jsonNumber(dispFarEdge)
+    payload := payload + ",\"bull_displacement\":" + jsonBool(bullDisplacement)
+    payload := payload + ",\"bear_displacement\":" + jsonBool(bearDisplacement)
+    payload := payload + ",\"probability_score\":" + jsonNumber(probScore)
+
+    payload := payload + "}"
+    payload
+
+//====================================================
+// ALERTS
+//====================================================
+if longSignal
+    payloadLong = buildPayload("long_entry", "long")
+    alert(payloadLong, alert.freq_once_per_bar_close)
+
+if shortSignal
+    payloadShort = buildPayload("short_entry", "short")
+    alert(payloadShort, alert.freq_once_per_bar_close)
+
+alertcondition(longSignal, title="Bridge Long Entry", message="Bridge long entry fired")
+alertcondition(shortSignal, title="Bridge Short Entry", message="Bridge short entry fired")
+
+//====================================================
+// VISUALS
+//====================================================
+plot(showDebugPlots ? emaFast : na, title="EMA Fast", color=color.new(color.green, 0), linewidth=2)
+plot(showDebugPlots ? emaSlow : na, title="EMA Slow", color=color.new(color.orange, 0), linewidth=2)
+plot(showDebugPlots ? emaTrend : na, title="EMA Trend", color=color.new(color.blue, 0), linewidth=2)
+
+if showLabels and longSignal
+    lbl = makeLbl(
+         bar_index,
+         low,
+         "LONG\n" + strategyIdInput,
+         label.style_label_up,
+         color.new(color.green, 0)
+     )
+    storeLabel(lbl)
+
+if showLabels and shortSignal
+    lbl = makeLbl(
+         bar_index,
+         high,
+         "SHORT\n" + strategyIdInput,
+         label.style_label_down,
+         color.new(color.red, 0)
+     )
+    storeLabel(lbl)
