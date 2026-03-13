@@ -27,12 +27,15 @@ from backend.tradingview_ingest_models import (
 )
 from backend.tradingview_ingest_service import (
     accept_tradingview_batch,
+    enforce_payload_size,
     get_batch_by_id,
     get_event_by_id,
     get_recent_batch_rows,
     get_recent_event_rows,
+    validate_signal_key as _validate_signal_key,
 )
 from backend.tradingview_ingest_storage import ensure_ingest_directories
+from backend.ingest_webhook_payload import archive_payload as _archive_payload
 from backend.signal_outcome_engine import (
     backfill_signal_snapshots_from_storage,
     get_outcome_engine_defaults,
@@ -5271,6 +5274,77 @@ async def tradingview_batch_ingest(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to ingest TradingView batch payload",
         )
+
+
+@app.post(
+    "/webhooks/tradingview/archive",
+    status_code=status.HTTP_201_CREATED,
+    summary="Archive raw TradingView webhook payload to data/webhook_ingest/",
+    responses={
+        201: {
+            "description": (
+                "Payload written to data/webhook_ingest/ as a JSON file. "
+                "No downstream processing is performed – the file is stored only."
+            ),
+        }
+    },
+)
+async def tradingview_archive_ingest(
+    request: Request,
+    signal_key: Annotated[Optional[str], Query(min_length=1)] = None,
+    x_signal_key: Annotated[Optional[str], Header(alias="X-SIGNAL-KEY")] = None,
+):
+    """Accept any JSON object from TradingView (via Cloudflare) and write it
+    verbatim to ``data/webhook_ingest/``.
+
+    The endpoint performs the same signal-key check as the batch endpoint.
+    The body is stored exactly as received – no normalisation, no patching of
+    Pine, no downstream pipeline.  The file is committed to the repository by
+    the scheduled GitHub Action (``.github/workflows/commit_webhook_ingest.yml``).
+
+    File naming: ``{strategy_id}__{release_version}__{utc_timestamp}.json``
+    """
+    raw_body = await request.body()
+    source_ip = request.client.host if request.client else None
+
+    enforce_payload_size(len(raw_body))
+    _validate_signal_key(
+        query_signal_key=signal_key,
+        header_signal_key=x_signal_key,
+        source_ip=source_ip,
+    )
+
+    try:
+        body_str = raw_body.decode("utf-8")
+        payload: dict = json.loads(body_str)
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid JSON body: {exc}",
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Payload must be a JSON object",
+        )
+
+    try:
+        written_path = _archive_payload(payload)
+    except OSError as exc:
+        logger.exception("Failed to write webhook archive file")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to write archive file: {exc}",
+        ) from exc
+
+    return {
+        "status": "archived",
+        "written_to": str(written_path),
+        "strategy_id": payload.get("strategy_id"),
+        "release_version": payload.get("release_version"),
+        "batch_id": payload.get("batch_id"),
+    }
 
 
 @app.get(

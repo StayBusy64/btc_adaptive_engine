@@ -1,0 +1,10 @@
+# This directory stores raw TradingView webhook payloads archived by the
+# /webhooks/tradingview/archive endpoint.
+#
+# Each file is named: {strategy_id}__{release_version}__{utc_timestamp}.json
+#
+# Files are committed automatically by the GitHub Action at:
+#   .github/workflows/commit_webhook_ingest.yml
+#
+# Do not edit or delete files in this directory manually.
+# They are the single source of truth for raw ingest history.

@@ -1,0 +1,70 @@
+name: Commit Webhook Ingest Files
+
+# Runs on a schedule and can be triggered manually.
+# Commits any new JSON files that the archive endpoint has written
+# to data/webhook_ingest/ back into the repository so the directory
+# becomes the single source of truth for raw TradingView ingest history.
+#
+# Prerequisites
+# -------------
+# The FastAPI backend must have write access to the local checkout
+# (i.e. be running in an environment where the repository is mounted)
+# OR the Cloudflare Worker must be configured to write files directly
+# via the GitHub Contents API (see docs/webhook_archival_flow.md).
+#
+# For the common Render-hosted backend case, pair this workflow with the
+# Cloudflare → GitHub direct-write path described in the docs.
+
+on:
+  schedule:
+    # Runs every hour at :05 past the hour
+    - cron: "5 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print what would be committed without pushing (true/false)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+jobs:
+  commit-ingest-files:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Use the default GITHUB_TOKEN — no extra secrets needed for commits
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Fetch full history so git status is accurate
+          fetch-depth: 1
+
+      - name: Check for new ingest files
+        id: check
+        run: |
+          git add data/webhook_ingest/
+          CHANGED=$(git diff --cached --name-only | grep '^data/webhook_ingest/' | wc -l)
+          echo "changed_count=${CHANGED}" >> "$GITHUB_OUTPUT"
+          echo "Found ${CHANGED} new/modified file(s) in data/webhook_ingest/"
+
+      - name: Commit new ingest files
+        if: steps.check.outputs.changed_count != '0' && github.event.inputs.dry_run != 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: archive $(git diff --cached --name-only | grep '^data/webhook_ingest/' | wc -l) new webhook ingest file(s) [skip ci]"
+          git push
+
+      - name: Dry-run summary
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "--- Dry-run mode: files that would be committed ---"
+          git diff --cached --name-only | grep '^data/webhook_ingest/' || echo "(none)"
+          git reset HEAD data/webhook_ingest/
+
+      - name: No new files
+        if: steps.check.outputs.changed_count == '0'
+        run: echo "No new ingest files to commit."
