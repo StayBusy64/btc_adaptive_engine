@@ -2093,7 +2093,7 @@ def _load_recent_execution_outcome_rows(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception:
@@ -2135,7 +2135,7 @@ def _load_execution_outcomes_scorecard(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception:
@@ -2177,7 +2177,7 @@ def _load_execution_outcomes_leaderboard(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception:
@@ -2219,7 +2219,7 @@ def _load_execution_outcomes_compare(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception:
@@ -2263,7 +2263,7 @@ def _load_execution_outcomes_policy_recommendation(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception:
@@ -2306,7 +2306,7 @@ def _load_execution_outcomes_policy_matrix(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception:
@@ -2352,7 +2352,7 @@ def _load_execution_outcomes_policy_audit(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception:
@@ -2398,7 +2398,7 @@ def _load_execution_outcomes_policy_audit_summary(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception:
@@ -4410,7 +4410,7 @@ def trade_candidates_recent(
         try:
             normalized_direction = _normalize_direction(direction)
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     try:
         rows = get_recent_trade_candidates(
@@ -4496,7 +4496,7 @@ def signals_recent(
         try:
             normalized_side = _normalize_direction(side)
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     try:
         rows = get_recent_normalized_signals(
@@ -4547,7 +4547,7 @@ def decisions_recent(
         try:
             normalized_side = _normalize_direction(side)
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     try:
         rows = get_recent_strategy_risk_decisions(
@@ -4599,7 +4599,7 @@ def execution_requests_recent(
         try:
             normalized_side = _normalize_direction(side)
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     try:
         rows = get_recent_execution_requests(
@@ -4716,7 +4716,7 @@ def fills_recent(
         try:
             normalized_side = _normalize_direction(side)
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     try:
         rows = get_recent_fills(
@@ -4765,7 +4765,7 @@ def positions_open(
         try:
             normalized_side = _normalize_direction(side)
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     try:
         rows = get_recent_positions(
@@ -4813,10 +4813,10 @@ def positions_recent(
         try:
             normalized_side = _normalize_direction(side)
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     if status_filter is not None and status_filter not in {"open", "closed"}:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="status must be 'open' or 'closed'")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="status must be 'open' or 'closed'")
 
     try:
         rows = get_recent_positions(
@@ -5206,7 +5206,7 @@ async def tradingview_webhooks_phase_one(payload: TradingViewAlertWebhookPayload
             execution_payload=execution_payload,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except Exception:
         logger.exception("Failed to process /webhooks/tradingview Phase 1 pipeline")
         raise HTTPException(
@@ -5264,7 +5264,7 @@ async def tradingview_batch_ingest(
     except HTTPException:
         raise
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except Exception:
         logger.exception("Failed to ingest TradingView batch payload")
         raise HTTPException(

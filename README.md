@@ -93,7 +93,7 @@ The endpoint:
 
 Runs inside the FastAPI process as an async background task.
 Polls `data/tv_ingest/pending/` every 60 seconds (configurable via
-`TRADINGVIEW_INGEST_CYCLE_INTERVAL_SECONDS`).
+`TRADINGVIEW_INGEST_CYCLE_SECONDS`).
 
 For each pending batch it:
 1. Normalizes every event (symbol, timeframe, side aliases, feature extraction).
