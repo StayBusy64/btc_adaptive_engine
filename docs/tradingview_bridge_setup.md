@@ -13,17 +13,17 @@ The canonical release metadata for this bridge lives in `tradingview/bridge_mani
 
 ## Backend startup
 
-Run the full API surface on port `8010`.
+Run the full API surface on port `8000`.
 
 ```powershell
 $env:TRADINGVIEW_INGEST_SIGNAL_KEY="change-me-now"
-python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8010 --reload
+python -m uvicorn backend.api_server:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Health check:
 
 ```text
-http://127.0.0.1:8010/health
+http://127.0.0.1:8000/health
 ```
 
 ## Release workflow
