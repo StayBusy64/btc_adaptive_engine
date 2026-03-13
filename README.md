@@ -295,6 +295,27 @@ python tools/build_bridge_pine.py --check-pine --write-release-notes
 
 ---
 
+## Cloudflare Tunnel setup
+
+```powershell
+# One-time tunnel creation (Administrator PowerShell)
+Set-ExecutionPolicy -Scope Process Bypass
+.\setup-cloudflare-tunnel.ps1
+
+# Or install as a Windows service too
+.\setup-cloudflare-tunnel.ps1 -InstallService
+```
+
+## Combined launcher (backend + tunnel)
+
+```powershell
+# Start both FastAPI and cloudflared in one terminal
+.\start_backend_and_tunnel.ps1
+
+# With uvicorn --reload for development
+.\start_backend_and_tunnel.ps1 -Reload
+```
+
 ## Auto-start tasks (Windows)
 
 ```powershell
